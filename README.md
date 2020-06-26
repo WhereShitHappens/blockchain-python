@@ -1,2 +1,2 @@
 ### Blockchain written in Python
-Current version 0.05
+#### Version 0.2.6
