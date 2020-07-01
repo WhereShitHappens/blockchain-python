@@ -1,8 +1,8 @@
-# Version 0.2.6 'Happy Birthday to me' edition
-print(' *' * 26, '26/06/1990', '* ' * 26)
+# Version 0.2.7 // 94
 
-# Known Version Issues:
-# The the balance doesn't update correctly
+import functools
+import hashlib as hl
+import json
 
 
 MINING_REWARD = 10
@@ -11,7 +11,8 @@ MINING_REWARD = 10
 genesis_block = {
     'previous_hash': 'genesis',
     'index': 0,
-    'transactions': []
+    'transactions': [],
+    'proof': 0.0
 }
 
 # Kick starting the blockchain
@@ -30,7 +31,23 @@ owner = 'Aris'
 
 def hash_block(block):
     # Later we will use a cryptographic hashing method instead
-    return '-'.join([str(block[key]) for key in block])
+    return hl.sha256(json.dumps(block).encode()).hexdigest()
+
+
+def valid_proof(transactions, last_hash, proof):
+    guess = (str(transactions) + str(last_hash) + str(proof)).encode()
+    guess_hash = hl.sha256(guess).hexdigest()
+    print(guess_hash)
+    return guess_hash[0:2] == '00'
+
+
+def proof_of_work():
+    last_block = blockchain[-1]
+    last_hash = hash_block(last_block)
+    proof = 0
+    while not valid_proof(open_transactions, last_hash, proof):
+        proof += 1
+    return proof
 
 
 def add_transaction(recipient, sender=owner, amount=1.0):
@@ -65,7 +82,7 @@ def verify_transaction(transaction):
 
 def get_balance(participant):
     """
-    We are checking if the participant has enough balance to complete the current transaction
+    We are checking for the amount the participant has received and sent
     :param participant: aka transaction['sender']
     :return:
     """
@@ -75,17 +92,12 @@ def get_balance(participant):
     # Since the open transactions are not part of the chain yet, we check them as well
     open_tx_sender = [tx['amount'] for tx in open_transactions if tx['sender'] == participant]
     tx_sender.append(open_tx_sender)
-    print('tx sender: ', tx_sender)
-    amount_sent = 0
-    for tx in tx_sender:
-        if len(tx) > 0:
-            amount_sent += tx[0]
+    print(tx_sender)
+    amount_sent = functools.reduce(lambda tx_sum, tx_amt: tx_sum + sum(tx_amt) if len(tx_amt) > 0 else tx_sum + 0, tx_sender, 0)
+
     tx_recipient = [[tx['amount'] for tx in block['transactions'] if tx['recipient'] == participant]
                     for block in blockchain]
-    amount_received = 0
-    for tx in tx_recipient:
-        if len(tx) > 0:
-            amount_received += tx[0]
+    amount_received = functools.reduce(lambda tx_sum, tx_amt: tx_sum + sum(tx_amt) if len(tx_amt) > 0 else tx_sum + 0, tx_recipient, 0)
     print('Balance: ', amount_received - amount_sent)
     return amount_received - amount_sent
 
@@ -93,18 +105,23 @@ def get_balance(participant):
 def mine_block():
     last_block = blockchain[-1]
     hashed_block = hash_block(last_block)
+    proof = proof_of_work()
     reward_transaction = {
         'sender': 'MINING',
         'recipient': owner,
         'amount': MINING_REWARD
     }
+    # Creating a copy of the open transaction list prevents the reward transaction doesnt
+    # become part of the open transactions, in case we don't reach the code that empties it.
+    # Impoortant to copy by reference instead of value. Otherwise changes in one list affect the other
     copied_transactions = open_transactions[:]
     # The last transaction in every block is the mining reward
     copied_transactions.append(reward_transaction)
     block = {
         'previous_hash': hashed_block,
         'index': len(blockchain),
-        'transactions': copied_transactions
+        'transactions': copied_transactions,
+        'proof': proof
     }
     blockchain.append(block)
     print('Hashed block: ', hashed_block)
@@ -133,7 +150,21 @@ def verify_chain():
         # to the corresponding HASHED entry in the blockchain
         if block['previous_hash'] != hash_block(blockchain[index - 1]):
             return False
+        if not valid_proof(block['transactions'][:-1], block['previous_hash'], block['proof']):
+            print('Proof of work is invalid')
+            return False
     return True
+
+
+def verify_transactions():
+    # is_valid = True
+    # for tx in open_transactions:
+    #     if verify_transaction(tx):
+    #         is_valid = True
+    #     else:
+    #         is_valid = False
+    # return is_valid
+    return all([verify_transaction(tx) for tx in open_transactions])
 
 
 def print_blockchain_elements():
@@ -153,6 +184,7 @@ while waiting_for_input:
     print('3: Output the blockchain blocks and the blockchain')
     print('4: Output the participants')
     print('5: Show balance')
+    print('6: Check transaction validity')
     print('h: Manipulate the blockchain')
     print('9: Print a block')
     user_choice = get_user_choice()
@@ -167,6 +199,7 @@ while waiting_for_input:
     elif user_choice == '2':
         # We empty the list containing the open transactions
         if mine_block():
+            # We are resetting the list here, instead of inside the function, so it is not a local variable
             open_transactions = []
     elif user_choice == '3':
         print_blockchain_elements()
@@ -174,6 +207,11 @@ while waiting_for_input:
         print(participants)
     elif user_choice == '5':
         print(get_balance(owner))
+    elif user_choice == '6':
+        if verify_transactions():
+            print('All transactions are valid')
+        else:
+            print('There are invalid transactions')
     elif user_choice == 'h':
         if len(blockchain) >= 0:
             blockchain[0] = {
@@ -188,3 +226,4 @@ while waiting_for_input:
     if not verify_chain():
         print('Invalid blockchain!')
         break
+    print('Balance of {}: {:6.2f}'.format('Aris', get_balance('Aris')))
