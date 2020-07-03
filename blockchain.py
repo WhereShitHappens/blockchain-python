@@ -1,8 +1,12 @@
-# Version 0.2.7 // 94
+# Version 0.2.8 // 108
 
 import functools
-import hashlib as hl
+# import hashlib as hl
+from collections import OrderedDict
 import json
+import pickle
+
+from hash_util import hash_string_256, hash_block
 
 
 MINING_REWARD = 10
@@ -29,14 +33,65 @@ participants = {'Aris'}
 owner = 'Aris'
 
 
-def hash_block(block):
-    # Later we will use a cryptographic hashing method instead
-    return hl.sha256(json.dumps(block).encode()).hexdigest()
+def load_data():
+    with open('blockchain.p', mode='rb') as f:
+        # file_content = f.readlines()
+        file_content = pickle.loads(f.read())
+        print(file_content)
+        global blockchain
+        global open_transactions
+        blockchain = file_content['chain']
+        open_transactions = file_content['ot']
+        # # We use the range selector on the line to remove the new line
+        # # backslash n character
+        # blockchain = json.loads(file_content[0][:-1])
+        # updated_blockchain = []
+        # # blockchain = [{'previous_hash': block['previous_hash'], 'index': block['index'], ]} for block in blockchain]
+        # for block in blockchain:
+        #     updated_block = {
+        #         'previous_hash': block['previous_hash'],
+        #         'index': block['index'],
+        #         'proof': block['proof'],
+        #         'transactions': [OrderedDict(
+        #              [('sender', tx['sender']), ('recipient', tx['recipient']), ('amount', tx['amount'])]) for tx in block['transactions']]
+        #     }
+        #     updated_blockchain.append(updated_block)
+        # blockchain = updated_blockchain
+        # open_transactions = json.loads(file_content[1])
+        # updated_transactions = []
+        # for tx in open_transactions:
+        #     updated_transaction = OrderedDict(
+        #              [('sender', tx['sender']), ('recipient', tx['recipient']), ('amount', tx['amount'])])
+        #     updated_transactions.append(updated_transaction)
+        # open_transactions = updated_transactions
+
+load_data()
+
+
+def save_data():
+    with open('blockchain.p', mode='wb') as f:
+        # f.write(json.dumps(blockchain))
+        # f.write('\n')
+        # f.write(json.dumps(open_transactions))
+        # Pickle
+        save_data = {
+            'chain': blockchain,
+            'ot': open_transactions
+        }
+        f.write(pickle.dumps(save_data))
+
+
+
+# def hash_block(block):
+#     # Dictionaries are unordered, so to ensure that the hashing algorithm always produces the same
+#     # hash for the same input, we set the short_keys method to True
+#     return hl.sha256(json.dumps(block, sort_keys=True).encode()).hexdigest()
 
 
 def valid_proof(transactions, last_hash, proof):
     guess = (str(transactions) + str(last_hash) + str(proof)).encode()
-    guess_hash = hl.sha256(guess).hexdigest()
+    print(guess)
+    guess_hash = hash_string_256(guess)
     print(guess_hash)
     return guess_hash[0:2] == '00'
 
@@ -59,17 +114,20 @@ def add_transaction(recipient, sender=owner, amount=1.0):
         :amount: The amount of coins sent with the transaction (default = 1.0)
     """
     # We will be using a dictionary for transactions as well, not to be confused with a blockchain block
-    transaction = {
-        'sender': sender,
-        'recipient': recipient,
-        'amount': amount
-    }
+    # transaction = {
+    #     'sender': sender,
+    #     'recipient': recipient,
+    #     'amount': amount
+    # }
+    transaction = OrderedDict(
+        [('sender', sender), ('recipient', recipient), ('amount', amount)])
     # This is where we pass the transaction to the next function
     if verify_transaction(transaction):
         open_transactions.append(transaction)
         participants.add(sender)
         participants.add(recipient)
         print('Open transactions: ', open_transactions)
+        save_data()
         return True
     return False
 
@@ -106,11 +164,12 @@ def mine_block():
     last_block = blockchain[-1]
     hashed_block = hash_block(last_block)
     proof = proof_of_work()
-    reward_transaction = {
-        'sender': 'MINING',
-        'recipient': owner,
-        'amount': MINING_REWARD
-    }
+    # reward_transaction = {
+    #     'sender': 'MINING',
+    #     'recipient': owner,
+    #     'amount': MINING_REWARD
+    # }
+    reward_transaction = OrderedDict([('sender', 'MINING'), ('recipient', owner), ('amount', MINING_REWARD)])
     # Creating a copy of the open transaction list prevents the reward transaction doesnt
     # become part of the open transactions, in case we don't reach the code that empties it.
     # Impoortant to copy by reference instead of value. Otherwise changes in one list affect the other
@@ -175,6 +234,7 @@ def print_blockchain_elements():
         print('Complete blockchain: ', blockchain)
         print('-' * 20)
 
+
 waiting_for_input = True
 
 while waiting_for_input:
@@ -185,6 +245,7 @@ while waiting_for_input:
     print('4: Output the participants')
     print('5: Show balance')
     print('6: Check transaction validity')
+    print('q: Exit the program')
     print('h: Manipulate the blockchain')
     print('9: Print a block')
     user_choice = get_user_choice()
@@ -201,6 +262,7 @@ while waiting_for_input:
         if mine_block():
             # We are resetting the list here, instead of inside the function, so it is not a local variable
             open_transactions = []
+            save_data()
     elif user_choice == '3':
         print_blockchain_elements()
     elif user_choice == '4':
@@ -212,6 +274,8 @@ while waiting_for_input:
             print('All transactions are valid')
         else:
             print('There are invalid transactions')
+    elif user_choice == 'q':
+        break
     elif user_choice == 'h':
         if len(blockchain) >= 0:
             blockchain[0] = {
