@@ -11,19 +11,11 @@ from hash_util import hash_string_256, hash_block
 
 MINING_REWARD = 10
 
-# The first block of the blockchain
-genesis_block = {
-    'previous_hash': 'genesis',
-    'index': 0,
-    'transactions': [],
-    'proof': 0.0
-}
-
 # Kick starting the blockchain
-blockchain = [genesis_block]
-
+blockchain = []
 # Transactions that are pending to be mined.
 open_transactions = []
+
 
 # Using a set adds another layer of security making sure there are no duplicate values
 # Indexing won't be required
@@ -34,58 +26,78 @@ owner = 'Aris'
 
 
 def load_data():
-    with open('blockchain.p', mode='rb') as f:
-        # file_content = f.readlines()
-        file_content = pickle.loads(f.read())
-        print(file_content)
+    """We are using to predict cases where the blockchain file is inaccessible
+        in which case will initiate a new blockchain.
+        Note that the commented code is in case we need to revert back to using Pickle
+    """
+    try:
         global blockchain
         global open_transactions
-        blockchain = file_content['chain']
-        open_transactions = file_content['ot']
-        # # We use the range selector on the line to remove the new line
-        # # backslash n character
-        # blockchain = json.loads(file_content[0][:-1])
-        # updated_blockchain = []
-        # # blockchain = [{'previous_hash': block['previous_hash'], 'index': block['index'], ]} for block in blockchain]
-        # for block in blockchain:
-        #     updated_block = {
-        #         'previous_hash': block['previous_hash'],
-        #         'index': block['index'],
-        #         'proof': block['proof'],
-        #         'transactions': [OrderedDict(
-        #              [('sender', tx['sender']), ('recipient', tx['recipient']), ('amount', tx['amount'])]) for tx in block['transactions']]
-        #     }
-        #     updated_blockchain.append(updated_block)
-        # blockchain = updated_blockchain
-        # open_transactions = json.loads(file_content[1])
-        # updated_transactions = []
-        # for tx in open_transactions:
-        #     updated_transaction = OrderedDict(
-        #              [('sender', tx['sender']), ('recipient', tx['recipient']), ('amount', tx['amount'])])
-        #     updated_transactions.append(updated_transaction)
-        # open_transactions = updated_transactions
+        with open('blockchain.txt', mode='r') as f:
+            file_content = f.readlines()
+            # file_content = pickle.loads(f.read())
+            print(file_content)
+            # blockchain = file_content['chain']
+            # open_transactions = file_content['ot']
+            # We use the range selector on the line to remove the new line
+            # backslash n character
+            blockchain = json.loads(file_content[0][:-1])
+            updated_blockchain = []
+            # blockchain = [{'previous_hash': block['previous_hash'], 'index': block['index'], ]} for block in blockchain]
+            for block in blockchain:
+                updated_block = {
+                    'previous_hash': block['previous_hash'],
+                    'index': block['index'],
+                    'proof': block['proof'],
+                    'transactions': [OrderedDict(
+                        [('sender', tx['sender']),
+                         ('recipient', tx['recipient']),
+                         ('amount', tx['amount'])]) for tx in block['transactions']]
+                }
+                updated_blockchain.append(updated_block)
+            blockchain = updated_blockchain
+            open_transactions = json.loads(file_content[1])
+            updated_transactions = []
+            for tx in open_transactions:
+                updated_transaction = OrderedDict(
+                    [('sender', tx['sender']), ('recipient', tx['recipient']), ('amount', tx['amount'])])
+                updated_transactions.append(updated_transaction)
+            open_transactions = updated_transactions
+    # What happens here is that when we can't find the blockchain file we will produce a new blockchain
+    except (ValueError, IOError):
+        # The first block of the blockchain
+        genesis_block = {
+            'previous_hash': 'genesis',
+            'index': 0,
+            'transactions': [],
+            'proof': 0.0
+        }
+
+        # Kick starting the blockchain
+        blockchain = [genesis_block]
+        # Transactions that are pending to be mined.
+        open_transactions = []
+    finally:
+        print('Cleanup! This will run even if there is an error')
+
 
 load_data()
 
 
 def save_data():
-    with open('blockchain.p', mode='wb') as f:
-        # f.write(json.dumps(blockchain))
-        # f.write('\n')
-        # f.write(json.dumps(open_transactions))
-        # Pickle
-        save_data = {
-            'chain': blockchain,
-            'ot': open_transactions
-        }
-        f.write(pickle.dumps(save_data))
-
-
-
-# def hash_block(block):
-#     # Dictionaries are unordered, so to ensure that the hashing algorithm always produces the same
-#     # hash for the same input, we set the short_keys method to True
-#     return hl.sha256(json.dumps(block, sort_keys=True).encode()).hexdigest()
+    try:
+        with open('blockchain.txt', mode='w') as f:
+            f.write(json.dumps(blockchain))
+            f.write('\n')
+            f.write(json.dumps(open_transactions))
+            # Pickle
+            # save_data = {
+            #     'chain': blockchain,
+            #     'ot': open_transactions
+            # }
+            # f.write(pickle.dumps(save_data))
+    except IOError:
+        print('Saving failed!')
 
 
 def valid_proof(transactions, last_hash, proof):
